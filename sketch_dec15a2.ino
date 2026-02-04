@@ -7,12 +7,12 @@
 // WIFI + API
 // =====================================================
 
-const char* ssid = "WRITE YOUR SSID HERE";
-const char* password = "WRITE YOUR PASSWORD HERE";
+const char* ssid = "DNA-WIFI-CFC8";
+const char* password = "aKAB6J6c";
 
 const char* entsoUrl = "https://web-api.tp.entsoe.eu/api";
-const char* token = "WRITE YOUR TOKEN HERE";
-const char* zone = "10YFI-1--------U"; // Finland
+const char* token = "c4c7b7bf-633e-4e61-972e-1ecd0cb878ef";
+const char* zone = "10YFI-1--------U";
 
 // =====================================================
 // STATE
@@ -24,6 +24,13 @@ const unsigned long fetchInterval = 60000;
 
 float cheapestFuturePrice = 9999.0;
 time_t cheapestFutureStart = 0;
+
+// Store today's prices (max 96 x 15min)
+float todayPrices[100];
+int todayPriceCount = 0;
+
+// Dynamic thresholds (relative to today)
+float tCheap, tOkay, tExpensive, tPain;
 
 // =====================================================
 // PRICE CLASSIFICATION
@@ -39,9 +46,9 @@ enum PriceLevel {
 
 PriceLevel classifyPrice(float c) {
   if (c < 0.0) return NEGATIVE;
-  if (c < 3.0) return CHEAP;
-  if (c < 6.0) return OKAY;
-  if (c < 10.0) return EXPENSIVE;
+  if (c <= tCheap) return CHEAP;
+  if (c <= tOkay) return OKAY;
+  if (c <= tExpensive) return EXPENSIVE;
   return PAIN;
 }
 
@@ -66,6 +73,21 @@ time_t timegm_esp(struct tm *tm) {
 }
 
 // =====================================================
+// HELPERS
+// =====================================================
+
+int cmpFloat(const void* a, const void* b) {
+  float fa = *(float*)a;
+  float fb = *(float*)b;
+  return (fa > fb) - (fa < fb);
+}
+
+float percentile(float* arr, int n, float p) {
+  int idx = (int)((n - 1) * p);
+  return arr[idx];
+}
+
+// =====================================================
 // API FETCH
 // =====================================================
 
@@ -76,6 +98,7 @@ bool fetchPrice() {
 
   cheapestFuturePrice = 9999.0;
   cheapestFutureStart = 0;
+  todayPriceCount = 0;
 
   struct tm tmNow;
   gmtime_r(&now, &tmNow);
@@ -139,11 +162,15 @@ bool fetchPrice() {
 
   while ((idx = payload.indexOf("<price.amount>", idx)) != -1) {
     int pEnd = payload.indexOf("</price.amount>", idx);
-    float price = payload.substring(idx + 14, pEnd).toFloat();
+    float price = payload.substring(idx + 14, pEnd).toFloat() * 0.1;
     time_t priceTime = startTime + (point * 15 * 60);
 
+    if (todayPriceCount < 100) {
+      todayPrices[todayPriceCount++] = price;
+    }
+
     if (now >= priceTime && now < priceTime + 900) {
-      latestPrice = price * 0.1;
+      latestPrice = price;
     }
 
     if (priceTime >= now && price < cheapestFuturePrice) {
@@ -154,6 +181,13 @@ bool fetchPrice() {
     point++;
     idx = pEnd;
   }
+
+  qsort(todayPrices, todayPriceCount, sizeof(float), cmpFloat);
+
+  tCheap     = percentile(todayPrices, todayPriceCount, 0.30);
+  tOkay      = percentile(todayPrices, todayPriceCount, 0.55);
+  tExpensive = percentile(todayPrices, todayPriceCount, 0.80);
+  tPain      = percentile(todayPrices, todayPriceCount, 0.95);
 
   currentPrice = latestPrice;
   return true;
@@ -192,72 +226,61 @@ void drawUI() {
 
   M5.Lcd.setCursor(200, 70);
   M5.Lcd.print(face);
+
+  M5.Lcd.setCursor(10, 110);
+  M5.Lcd.print("Relative to today");
 }
 
 // =====================================================
-// SHOULD I USE POWER NOW? (SPICY)
+// DECISION SCREEN → NOW EXPLANATION SCREEN
 // =====================================================
 
 void showDecisionScreen() {
-  PriceLevel level = classifyPrice(currentPrice);
+  if (todayPriceCount == 0) return;
 
-  uint16_t bg;
-  const char* verdict;
-  const char* advice1;
-  const char* advice2;
+  float minP = todayPrices[0];
+  float maxP = todayPrices[todayPriceCount - 1];
 
-  switch (level) {
-    case NEGATIVE:
-    case CHEAP:
-      bg = TFT_GREEN;
-      verdict = "YES. GO WILD.";
-      advice1 = "Laundry, EV, Sauna";
-      advice2 = "All systems GO";
-      break;
+  M5.Lcd.fillScreen(TFT_BLACK);
+  M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
 
-    case OKAY:
-      bg = TFT_BLUE;
-      verdict = "OKAY IF NEEDED";
-      advice1 = "Cooking, TV, PC";
-      advice2 = "Avoid big loads";
-      break;
-
-    case EXPENSIVE:
-      bg = TFT_ORANGE;
-      verdict = "BETTER WAIT";
-      advice1 = "Lights & phone OK";
-      advice2 = "Skip laundry";
-      break;
-
-    default:
-      bg = TFT_RED;
-      verdict = "DO NOT USE";
-      advice1 = "Essentials only";
-      advice2 = "Wait for cheap";
-      break;
-  }
-
-  M5.Lcd.fillScreen(bg);
-  M5.Lcd.setTextColor(TFT_WHITE, bg);
-
+  // Title
   M5.Lcd.setTextSize(2);
-  M5.Lcd.setCursor(20, 15);
-  M5.Lcd.print("Power or nah?");
+  M5.Lcd.setCursor(10, 8);
+  M5.Lcd.print("PRICE CONTEXT");
 
-  M5.Lcd.setTextSize(3);
-  M5.Lcd.setCursor(20, 45);
-  M5.Lcd.print(verdict);
-
+  // Range
   M5.Lcd.setTextSize(2);
-  M5.Lcd.setCursor(20, 95);
-  M5.Lcd.print(advice1);
+  M5.Lcd.setCursor(10, 35);
+  M5.Lcd.print("Range:");
+  M5.Lcd.print(" ");
+  M5.Lcd.print(minP, 1);
+  M5.Lcd.print(" - ");
+  M5.Lcd.print(maxP, 1);
+  M5.Lcd.print(" c");
 
-  M5.Lcd.setCursor(20, 120);
-  M5.Lcd.print(advice2);
+  // Thresholds (smaller font)
+  M5.Lcd.setTextSize(1);
+  M5.Lcd.setCursor(10, 65);
+  M5.Lcd.print("CHEAP  <= ");
+  M5.Lcd.print(tCheap, 1);
 
-  delay(2500);
+  M5.Lcd.setCursor(10, 80);
+  M5.Lcd.print("OKAY   <= ");
+  M5.Lcd.print(tOkay, 1);
+
+  M5.Lcd.setCursor(10, 95);
+  M5.Lcd.print("HIGH   <= ");
+  M5.Lcd.print(tExpensive, 1);
+
+  // Footer
+  M5.Lcd.setCursor(10, 120);
+  M5.Lcd.print("Categories are relative to today");
+
+  delay(6000);   // ⏱ stays longer
   drawUI();
 }
+
 
 // =====================================================
 // CHEAPEST FUTURE PRICE FLASH
@@ -274,19 +297,8 @@ void showCheapestFuturePrice() {
           t.tm_hour, t.tm_min,
           (t.tm_hour + 1) % 24, t.tm_min);
 
-  PriceLevel level = classifyPrice(cheapestFuturePrice * 0.1);
-
-  uint16_t bg;
-  switch (level) {
-    case NEGATIVE:  bg = TFT_PURPLE; break;
-    case CHEAP:     bg = TFT_GREEN;  break;
-    case OKAY:      bg = TFT_BLUE;   break;
-    case EXPENSIVE: bg = TFT_ORANGE; break;
-    default:        bg = TFT_RED;    break;
-  }
-
-  M5.Lcd.fillScreen(bg);
-  M5.Lcd.setTextColor(TFT_WHITE, bg);
+  M5.Lcd.fillScreen(TFT_GREEN);
+  M5.Lcd.setTextColor(TFT_WHITE, TFT_GREEN);
 
   M5.Lcd.setTextSize(2);
   M5.Lcd.setCursor(20, 20);
@@ -294,7 +306,7 @@ void showCheapestFuturePrice() {
 
   M5.Lcd.setTextSize(3);
   M5.Lcd.setCursor(20, 60);
-  M5.Lcd.print(cheapestFuturePrice * 0.1, 2);
+  M5.Lcd.print(cheapestFuturePrice, 2);
   M5.Lcd.print(" c/kWh");
 
   M5.Lcd.setTextSize(2);
@@ -306,18 +318,18 @@ void showCheapestFuturePrice() {
 }
 
 // =====================================================
-// BUTTONS
+// BUTTONS (UNCHANGED)
 // =====================================================
 
 void handleButtons() {
   M5.update();
 
   if (M5.BtnA.wasPressed()) {
-    showDecisionScreen();
+    showCheapestFuturePrice();
   }
 
   if (M5.BtnB.wasPressed()) {
-    showCheapestFuturePrice();
+    showDecisionScreen();
   }
 }
 
