@@ -1,80 +1,92 @@
-# Power-or-Nah (M5StickC Plus 2)
+# Power or Nah ⚡
 
-A small desk device that shows real-time electricity prices and gives a simple verdict:
-**is it a good idea to use power right now, or should you wait?**
+A small desk device built with an M5StickC Plus 2 that shows real-time electricity prices in a simple, glanceable way.
 
-Built for an M5StickC Plus 2 using the ENTSO-E electricity market API.
+Instead of asking you to interpret numbers, the device uses color-coded categories to answer a basic question:
+
+**Is electricity cheap right now, or should I wait?**
 
 ---
 
 ## What it does
 
-- Continuously fetches electricity prices (automatic refresh)
-- Shows the **current price** with clear color coding
-- Answers a simple question:
-  > *Should I use power now?*
-- Shows the **cheapest upcoming time window**
-- Designed to be glanceable, opinionated, and useful
-
-This is meant to live on a desk, not be a full dashboard.
-
----
-
-## Buttons
-
-- **Button A**  
-  Shows a short decision screen with guidance  
-  (e.g. *OK to use*, *better wait*, *do not use*)
-
-- **Button B**  
-  Shows the cheapest upcoming price and its time range
-
-- **Power button**  
-  Default system behavior (screen on/off, restart)
+- Fetches real-time electricity spot prices from the ENTSO-E API
+- Displays the current price on screen (c/kWh)
+- Classifies the price visually:
+  - Free / Cheap / Okay / High / Don’t use
+- Updates automatically every minute
+- Button actions:
+  - Show the cheapest upcoming time slot
+  - Show how today’s price categories were defined
 
 ---
 
-## Price logic
+## Relative price logic (important)
 
-Prices are classified into simple levels:
+The device does **not** use fixed price thresholds.
 
-- FREE / CHEAP
-- OKAY
-- EXPENSIVE
-- DO NOT USE
+Instead, price categories are calculated **relative to today’s prices**:
 
-The device does not try to be precise — it tries to be useful.
+- All prices for the current day are collected
+- Percentile-based thresholds are calculated from that data
+- The current price is classified based on where it sits *within today’s range*
+
+This means:
+- Winter prices don’t permanently show “DON’T USE”
+- Summer prices don’t falsely look “cheap”
+- The classification adapts automatically to market conditions
+
+The screen explicitly notes this with:
+
+> *“Relative to today”*
 
 ---
 
 ## Region & data source
 
-This implementation is configured for **Finland**, using the ENTSO-E API.
+- Electricity data is fetched from **ENTSO-E**
+- The default bidding zone is **Finland**
+- The concept works for **any country or bidding zone** supported by ENTSO-E
 
-However, the **idea is fully reusable**:
-- Any country or bidding zone supported by ENTSO-E
-- Or any other electricity pricing API
-
-Only the zone code and data source need to change.
+To adapt this project to another country, you only need to change the bidding zone code.
 
 ---
 
 ## Hardware
 
 - M5StickC Plus 2
-- Wi-Fi connection
-- USB power recommended for stability
+- WiFi connection required
+- Can run on battery, but works best when powered continuously
 
 ---
 
-## Notes
+## Why this exists
 
-- API keys and Wi-Fi credentials must be provided by the user
-- This project is intentionally simple and opinionated
-- Use, adapt, fork, or modify as needed
+This project is intentionally simple.
+
+No charts.  
+No predictions.  
+No notifications.
+
+Just:
+- real prices
+- honest context
+- fast decisions
+
+Think of it as a small ambient instrument for energy awareness.
+
+---
+
+## Disclaimer
+
+This project is for informational purposes only.  
+It does not provide financial or energy usage advice.
+
+Electricity prices can change rapidly — always use your own judgment.
 
 ---
 
 ## License
 
-MIT
+MIT License.  
+Use it, modify it, build on it.
