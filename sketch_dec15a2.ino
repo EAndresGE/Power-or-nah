@@ -7,12 +7,12 @@
 // WIFI + API
 // =====================================================
 
-const char* ssid = "DNA-WIFI-CFC8";
-const char* password = "aKAB6J6c";
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
 
 const char* entsoUrl = "https://web-api.tp.entsoe.eu/api";
-const char* token = "c4c7b7bf-633e-4e61-972e-1ecd0cb878ef";
-const char* zone = "10YFI-1--------U";
+const char* token = "YOUR_ENTSOE_API_TOKEN";  // Get a free token at https://transparency.entsoe.eu
+const char* zone = "10YFI-1--------U";        // Finland — change to your bidding zone
 
 // =====================================================
 // STATE
